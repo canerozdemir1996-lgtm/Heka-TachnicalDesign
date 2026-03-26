@@ -5,4 +5,4 @@ rembg
 pillow
 vtracer
 numpy<2.0.0
-onnxruntime-slim
+onnxruntime

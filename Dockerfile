@@ -1,6 +1,6 @@
 FROM python:3.11-slim-bookworm
 
-# Sistem araçlarını ve Inkscape'i (EPS için şart) kuruyoruz
+# Inkscape ve sistem kütüphaneleri
 RUN apt-get update && apt-get install -y \
     inkscape \
     libgl1-mesa-glx \
@@ -9,13 +9,13 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Önce malzemeler, sonra inşaat
+# Önce pip'i güncelleyelim, sonra malzemeleri kuralım
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Railway'in nazlı portuna uyum sağlayalım
 ENV PORT=8080
 EXPOSE 8080
 
