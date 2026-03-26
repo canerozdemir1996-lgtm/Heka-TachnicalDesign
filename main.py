@@ -6,12 +6,9 @@ from PIL import Image
 
 app = FastAPI()
 
-# RAM dostu model oturumu - Yeni versiyonlarda ismi budur uşağum!
-# Eğer 'isnet-general-use' bulamazsa standart olana döner.
-try:
-    session = new_session("isnet-general-use")
-except:
-    session = new_session("u2net")
+# İşte Karadeniz zekası! Sadece 4 MB'lık hamsi model. 
+# Sunucunun RAM'ini gram yormaz, 503 hatası falan verdirmez!
+session = new_session("u2netp")
 
 def cleanup(files: list):
     for f in files:
@@ -21,7 +18,7 @@ def cleanup(files: list):
 
 @app.get("/")
 async def home():
-    return {"mesaj": "Dernekpazarı Mermi Gibi Vektör Servisi Aktif! /docs adresine gel uşağum!"}
+    return {"mesaj": "Dernekpazarı Mermi Gibi Vektör Servisi Aktif! Hadi /docs adresine gel uşağum!"}
 
 @app.post("/vektorlestir")
 async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
@@ -30,7 +27,7 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
         content = await file.read()
         input_img = Image.open(io.BytesIO(content)).convert("RGBA")
         
-        # 2. Arka planı temizle
+        # 2. Arka planı en hafif modelle temizle (Sunucu bayılmasun diye)
         no_bg = remove(input_img, session=session)
         
         base_name = "sonuc"
@@ -46,18 +43,19 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
         if v_func:
             v_func(temp_png, temp_svg, mode='spline', clustering_threshold=15)
         else:
-            raise Exception("VTracer motoru çalüşmayi uşağum!")
+            raise Exception("VTracer motoru darmadağın oldi, çalüşmayi uşağum!")
 
         # 4. Inkscape ile EPS'ye paketle
         os.system(f"inkscape {temp_svg} --export-type=eps --export-filename={temp_eps}")
 
         if not os.path.exists(temp_eps):
-            # EPS olmazsa bari SVG gönderelum, boş dönmeyelum
+            # EPS olmazsa bari SVG gönderelum, yari yolda kalmayalum
             if os.path.exists(temp_svg):
+                background_tasks.add_task(cleanup, [temp_png, temp_svg])
                 return FileResponse(temp_svg, media_type='image/svg+xml', filename=f"{base_name}.svg")
-            return JSONResponse(content={"hata": "Vektör oluşturulamadi uşağum!"}, status_code=500)
+            return JSONResponse(content={"hata": "Vektör oluşturulamadi uşağum, matbaa yandi!"}, status_code=500)
 
-        # Temizlik görevini arkaya atalum
+        # Temizlik görevini arkaya atalum (Çöpleri dereye dökiyi)
         background_tasks.add_task(cleanup, [temp_png, temp_svg, temp_eps])
 
         return FileResponse(
