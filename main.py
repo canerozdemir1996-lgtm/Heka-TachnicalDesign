@@ -1,10 +1,14 @@
-import os, io, vtracer, cv2
+import os, io, vtracer
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
-from rembg import remove
+from rembg import remove, new_session
 from PIL import Image
 
 app = FastAPI()
+
+# RAM dostu hafif model oturumu (u2net_thin)
+# Bu uşak sadece 10 MB'dur, sunucuyu yormaz!
+session = new_session("u2net_thin")
 
 def cleanup(files: list):
     for f in files:
@@ -14,15 +18,17 @@ def cleanup(files: list):
 
 @app.get("/")
 async def home():
-    return {"mesaj": "Dernekpazarı Vektör Servisi Aktif! /docs adresine git uşağum!"}
+    return {"mesaj": "Dernekpazarı Hafif Vektör Servisi Aktif! /docs adresine gel uşağum!"}
 
 @app.post("/vektorlestir")
 async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     try:
-        # 1. Fotoğrafı oku ve arka planı uçur
+        # 1. Fotoğrafı oku ve arka planı İNCE modelle uçur
         content = await file.read()
         input_img = Image.open(io.BytesIO(content)).convert("RGBA")
-        no_bg = remove(input_img)
+        
+        # Hafif modelle temizlik (u2net_thin kullanımı)
+        no_bg = remove(input_img, session=session)
         
         base_name = "sonuc"
         temp_png = f"{base_name}_temp.png"
@@ -36,15 +42,20 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
         v_func(temp_png, temp_svg, mode='spline', clustering_threshold=15)
 
         # 3. Inkscape ile EPS'ye paketle
+        # Docker içinde Inkscape kurulu olduğu için fisek gibi çalışır
         os.system(f"inkscape {temp_svg} --export-type=eps --export-filename={temp_eps}")
 
         if not os.path.exists(temp_eps):
-            return JSONResponse(content={"hata": "EPS dosyasi oluşturulamadi uşağum!"}, status_code=500)
+            return JSONResponse(content={"hata": "EPS oluşturulamadi, usta uyuyayi!"}, status_code=500)
 
-        # İş bitince temizlik yapalum
+        # Temizlik görevini arkaya atalum
         background_tasks.add_task(cleanup, [temp_png, temp_svg, temp_eps])
 
-        return FileResponse(path=temp_eps, filename=f"{file.filename.split('.')[0]}.eps", media_type='application/postscript')
+        return FileResponse(
+            path=temp_eps, 
+            filename=f"{file.filename.split('.')[0]}_vektor.eps", 
+            media_type='application/postscript'
+        )
 
     except Exception as e:
         return JSONResponse(content={"hata": str(e)}, status_code=500)
