@@ -6,9 +6,12 @@ from PIL import Image
 
 app = FastAPI()
 
-# RAM dostu hafif model oturumu (u2net_thin)
-# Bu uşak sadece 10 MB'dur, sunucuyu yormaz!
-session = new_session("u2net_thin")
+# RAM dostu model oturumu - Yeni versiyonlarda ismi budur uşağum!
+# Eğer 'is-net-general-use' bulamazsa standart olana döner.
+try:
+    session = new_session("is-net-general-use")
+except:
+    session = new_session("u2net")
 
 def cleanup(files: list):
     for f in files:
@@ -18,16 +21,16 @@ def cleanup(files: list):
 
 @app.get("/")
 async def home():
-    return {"mesaj": "Dernekpazarı Hafif Vektör Servisi Aktif! /docs adresine gel uşağum!"}
+    return {"mesaj": "Dernekpazarı Mermi Gibi Vektör Servisi Aktif! /docs adresine gel uşağum!"}
 
 @app.post("/vektorlestir")
 async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     try:
-        # 1. Fotoğrafı oku ve arka planı İNCE modelle uçur
+        # 1. Fotoğrafı oku
         content = await file.read()
         input_img = Image.open(io.BytesIO(content)).convert("RGBA")
         
-        # Hafif modelle temizlik (u2net_thin kullanımı)
+        # 2. Arka planı temizle
         no_bg = remove(input_img, session=session)
         
         base_name = "sonuc"
@@ -37,16 +40,22 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
         
         no_bg.save(temp_png)
 
-        # 2. Vektörleştirme (SVG)
+        # 3. Vektörleştirme (SVG)
+        # v_func kontrolü (Laz inadı ile garantili buluş)
         v_func = getattr(vtracer, 'convert_to_svg', getattr(vtracer, 'convert_image_to_svg', None))
-        v_func(temp_png, temp_svg, mode='spline', clustering_threshold=15)
+        if v_func:
+            v_func(temp_png, temp_svg, mode='spline', clustering_threshold=15)
+        else:
+            raise Exception("VTracer motoru çalüşmayi uşağum!")
 
-        # 3. Inkscape ile EPS'ye paketle
-        # Docker içinde Inkscape kurulu olduğu için fisek gibi çalışır
+        # 4. Inkscape ile EPS'ye paketle
         os.system(f"inkscape {temp_svg} --export-type=eps --export-filename={temp_eps}")
 
         if not os.path.exists(temp_eps):
-            return JSONResponse(content={"hata": "EPS oluşturulamadi, usta uyuyayi!"}, status_code=500)
+            # EPS olmazsa bari SVG gönderelum, boş dönmeyelum
+            if os.path.exists(temp_svg):
+                return FileResponse(temp_svg, media_type='image/svg+xml', filename=f"{base_name}.svg")
+            return JSONResponse(content={"hata": "Vektör oluşturulamadi uşağum!"}, status_code=500)
 
         # Temizlik görevini arkaya atalum
         background_tasks.add_task(cleanup, [temp_png, temp_svg, temp_eps])
