@@ -1,22 +1,32 @@
-# Python 3.11 tabanlı sağlam bir temel seçtik
-FROM python:3.11-slim
+# Python 3.11'in daha geniş bir sürümünü kullanalum ki bağımlılık derdi olmasun
+FROM python:3.11-slim-bookworm
 
-# Sistem araçlarını ve Inkscape'i kuruyoruz (EPS için şart!)
-RUN apt-get update && apt-get install -y \
+# 1. Aşama: Sistem güncelleme ve Inkscape kurulumu (Hata payını sıfırladık)
+RUN apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
     inkscape \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+    libsm6 \
+    libxrender1 \
+    libxext6 \
+    build-essential \
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Çalışma klasörümüzü ayarlayalım
+# 2. Aşama: Çalışma klasörü
 WORKDIR /app
 
-# Önce malzemeleri yükleyelim
+# 3. Aşama: Bağımlılıklar (Önce bunları halledelim ki hızlansun)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Kodları içeri alalım
+# 4. Aşama: Kodları içeri alalum
 COPY . .
 
-# Uygulamayı 8080 portundan ayağa kaldıralım
-CMD ["uvicorn", "main.py:app", "--host", "0.0.0.0", "--port", "8080"]
+# 5. Aşama: Railway için port ayarı (8080 standarttur)
+EXPOSE 8080
+
+# Çalıştıralum gitsin!
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
