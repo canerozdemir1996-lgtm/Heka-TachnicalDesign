@@ -7,9 +7,9 @@ from PIL import Image
 app = FastAPI()
 
 # RAM dostu model oturumu - Yeni versiyonlarda ismi budur uşağum!
-# Eğer 'is-net-general-use' bulamazsa standart olana döner.
+# Eğer 'isnet-general-use' bulamazsa standart olana döner.
 try:
-    session = new_session("is-net-general-use")
+    session = new_session("isnet-general-use")
 except:
     session = new_session("u2net")
 
