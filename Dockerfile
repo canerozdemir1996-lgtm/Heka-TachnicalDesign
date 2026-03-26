@@ -1,6 +1,6 @@
 FROM python:3.11-slim-bookworm
 
-# Inkscape ve sistem kütüphaneleri
+# Sistem araçları ve meşhur Inkscape'imiz
 RUN apt-get update && apt-get install -y \
     inkscape \
     libgl1-mesa-glx \
@@ -9,14 +9,13 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Önce pip'i güncelleyelim, sonra malzemeleri kuralım
+# Malzemeleri hızlıca kur
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENV PORT=8080
-EXPOSE 8080
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Laz inadını bıraktuk! Railway hangi PORT'u verirse uşak oraya geçecek.
+# Eğer kimse port vermezse (senin bilgisayarda falan) yine 8080'de durur.
+CMD sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"
