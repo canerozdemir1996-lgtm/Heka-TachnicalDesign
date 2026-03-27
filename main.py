@@ -9,7 +9,7 @@ from rembg import remove, new_session
 
 app = FastAPI()
 
-# Yapay zeka modelini rölantide tutayruk (Hamsi model)
+# Yapay zeka modelini rölantide tutayruk (Dekupe için hayati)
 session = new_session("u2netp")
 
 def cleanup(files: list):
@@ -20,7 +20,7 @@ def cleanup(files: list):
 
 @app.get("/")
 async def home():
-    return {"mesaj": "Dernekpazarı Dekupeli Çizim Motoru Aktif!"}
+    return {"mesaj": "Dernekpazarı CAD Motoru (Blueprint) Aktif! /docs adresine gel!"}
 
 @app.post("/vektorlestir")
 async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
@@ -29,16 +29,17 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
     temp_svg = f"s_{job_id}.svg"
     
     try:
-        # 1. DOSYAYI OKU VE UFALT (Render RAM'i için 800px hayati önemdedur!)
+        # 1. DOSYAYI OKU VE UFALT (DSC fotoğrafları için bu hayati! RAM patlamasın)
         content = await file.read()
         img = Image.open(io.BytesIO(content)).convert("RGBA")
-        img.thumbnail((800, 800))
         
-        # 2. YAPAY ZEKA İLE DEKUPE ET (Arka plani sil)
+        # 1200px sınırı Render için hayat kurtarır, kaliteyi de korur.
+        img.thumbnail((1200, 1200))
+        
+        # 2. YAPAY ZEKA İLE DEKUPE ET (Senin dekupe inadun yüzünden uşağı mutfağa soktuk)
         no_bg_img = remove(img, session=session)
         
-        # 3. OPENCV İÇİN HAZIRLA
-        # Arka plani şeffaf değil, tam BEYAZ yapayruk ki çizgiler net çiksun
+        # 3. OPENCV İÇİN HAZIRLA (Teknik iskelet çıkmadan önce beyaz kağıda koyalim)
         white_bg = Image.new("RGBA", no_bg_img.size, "WHITE")
         white_bg.paste(no_bg_img, (0, 0), no_bg_img)
         rgb_img = white_bg.convert("RGB")
@@ -47,20 +48,21 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
         img_cv2 = np.array(rgb_img)
         img_cv2 = img_cv2[:, :, ::-1].copy() # RGB'den BGR'ye
         
-        # 4. TEKNİK ÇİZGİLERİ (İSKELETİ) ÇIKART
+        # 4. TEKNİK ÇİZGİ İSKELETİNİ (LINE ART) ÇIKART
         gray = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         edges = cv2.Canny(blurred, 50, 150)
         
-        # Çizgileri biraz kalınlaştur (Silik çikmasun)
+        # Çizgileri biraz kalınlaştur (O 10 örnekteki gibi net çiksun)
         kernel = np.ones((2,2), np.uint8)
         edges = cv2.dilate(edges, kernel, iterations=1)
         
-        # Siyah arka planı beyaz, beyaz çizgileri siyah yap
+        # Siyah arka planı beyaz, beyaz çizgileri siyah yap (Tam teknik blueprint tarzı)
         edges_inv = cv2.bitwise_not(edges)
         cv2.imwrite(temp_edge_png, edges_inv)
         
-        # 5. VTRACER İLE VEKTÖR YAP (Siyah/Beyaz Modunda)
+        # 5. VTRACER İLE VEKTÖR YAP (Teknik Çizim Ayarlarıyla)
+        # Hata veren 'clustering_threshold' silindi! 'colormode="bw"' (black/white) yapıldı.
         try:
             vtracer.convert_image_to_svg_py(temp_edge_png, temp_svg, colormode="bw", mode="spline")
         except AttributeError:
@@ -78,9 +80,10 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
 
         background_tasks.add_task(cleanup, [temp_edge_png, temp_svg])
 
+        # Saf, temiz, jilet gibi CAD iskeletini (SVG) fırlat gitsin! Illustrator'da aç bak keyfine!
         return FileResponse(
             path=temp_svg, 
-            filename=f"dekupe_cizim_{job_id}.svg", 
+            filename=f"{file.filename.split('.')[0]}_blueprint.svg", 
             media_type='image/svg+xml'
         )
 
