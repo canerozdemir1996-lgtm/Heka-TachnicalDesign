@@ -4,5 +4,3 @@ python-multipart
 pillow
 opencv-python-headless
 vtracer
-rembg
-onnxruntime
