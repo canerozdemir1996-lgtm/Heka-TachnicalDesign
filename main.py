@@ -29,14 +29,14 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
     temp_svg = f"s_{job_id}.svg"
     
     try:
-        # 1. DOSYAYI OKU VE UFALT (DSC fotoğrafları için bu hayati! RAM patlamasın)
+        # 1. DOSYAYI OKU VE UFALT (Render RAM'i patlamasın uşağum!)
         content = await file.read()
         img = Image.open(io.BytesIO(content)).convert("RGBA")
         
-        # 1200px sınırı Render için hayat kurtarır, kaliteyi de korur.
+        # 1200px sınırı hem kalite hem RAM dostudur.
         img.thumbnail((1200, 1200))
         
-        # 2. YAPAY ZEKA İLE DEKUPE ET (Senin dekupe inadun yüzünden uşağı mutfağa soktuk)
+        # 2. YAPAY ZEKA İLE DEKUPE ET (Arka plani sil, ürünü ayir)
         no_bg_img = remove(img, session=session)
         
         # 3. OPENCV İÇİN HAZIRLA (Teknik iskelet çıkmadan önce beyaz kağıda koyalim)
