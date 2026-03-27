@@ -1,6 +1,6 @@
 FROM python:3.11-slim-bookworm
 
-# Inkscape ve kütüphaneler
+# Inkscape ve sistem kütüphaneleri (Zorunlu malzemeler)
 RUN apt-get update && apt-get install -y \
     inkscape \
     libgl1-mesa-glx \
@@ -15,5 +15,5 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY . .
 
-# Hugging Face'in beklediği tek kapı 7860'tır!
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Render'ın verdiği PORT neyse uşak oraya geçecek!
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}
