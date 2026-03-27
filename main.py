@@ -1,7 +1,6 @@
-import os, io, vtracer, asyncio
+import os, subprocess, asyncio, uuid
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
-from PIL import Image
 
 app = FastAPI()
 
@@ -13,43 +12,45 @@ def cleanup(files: list):
 
 @app.get("/")
 async def home():
-    return {"mesaj": "Render Yaylası Aktif! /docs adresine gel!"}
+    return {"mesaj": "Render RAM Dostu Yayla Aktif!"}
 
 @app.post("/vektorlestir")
 async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    # Dosya adını benzersiz yapalım
+    job_id = str(uuid.uuid4())
+    in_file = f"in_{job_id}.jpg"
+    out_svg = f"out_{job_id}.svg"
+    out_eps = f"out_{job_id}.eps"
+    
     try:
-        # 1. Dosyayı en az RAM harcayacak şekilde oku
-        content = await file.read()
-        img = Image.open(io.BytesIO(content))
-        
-        # 2. Daha fotoğrafı açmadan önce boyutunu iyice ufalat (Sunucu bayılmasın!)
-        # Bu işlem RAM'i korur uşağum!
-        img.thumbnail((800, 800))
-        
-        temp_png = "s.png"
-        temp_svg = "s.svg"
-        temp_eps = "s.eps"
-        
-        # PNG olarak kaydet (Arka plan silmeyi şimdilik geçtik, test ediyoruz!)
-        img.save(temp_png)
+        # 1. Fotoğrafı RAM'e yüklemeden doğrudan diske yaz!
+        # En güvenli yol budur, RAM şişmez.
+        with open(in_file, "wb") as f:
+            f.write(await file.read())
 
-        # 3. Vektörleştirme (VTracer fisek gibidir, yormaz)
-        vtracer.convert_image_to_svg(temp_png, temp_svg, mode='spline')
+        # 2. VTracer'ı binary olarak çalıştır (RAM harcamaz)
+        # Not: requirements.txt içinde vtracer-cli yüklü olmalı
+        subprocess.run([
+            "vtracer", 
+            "--input", in_file, 
+            "--output", out_svg, 
+            "--mode", "spline",
+            "--clustering_threshold", "15"
+        ], check=True)
 
-        # 4. Inkscape ile EPS çevirisi
-        process = await asyncio.create_subprocess_shell(
-            f"inkscape {temp_svg} --export-type=eps --export-filename={temp_eps}",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        await process.communicate()
+        # 3. Inkscape ile EPS yap
+        subprocess.run([
+            "inkscape", out_svg, 
+            "--export-type=eps", 
+            "--export-filename=out_eps"
+        ])
 
-        background_tasks.add_task(cleanup, [temp_png, temp_svg, temp_eps])
-        
-        if os.path.exists(temp_eps):
-            return FileResponse(temp_eps, filename="vektor.eps")
-        else:
-            return FileResponse(temp_svg, filename="vektor.svg")
+        background_tasks.add_task(cleanup, [in_file, out_svg, out_eps])
+
+        if os.path.exists(out_eps):
+            return FileResponse(out_eps, filename="vektor.eps")
+        return FileResponse(out_svg, filename="vektor.svg")
 
     except Exception as e:
+        cleanup([in_file, out_svg, out_eps])
         return JSONResponse(content={"hata": str(e)}, status_code=500)
