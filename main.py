@@ -1,7 +1,8 @@
-import os, io, asyncio, uuid, vtracer
+import os, io, asyncio, uuid
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from PIL import Image
+import vtracer
 
 app = FastAPI()
 
@@ -13,7 +14,7 @@ def cleanup(files: list):
 
 @app.get("/")
 async def home():
-    return {"mesaj": "Render Yaylası Aktif! /docs adresine gel!"}
+    return {"mesaj": "Render Yaylası Mermi Gibi Aktif! /docs adresine gel!"}
 
 @app.post("/vektorlestir")
 async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
@@ -23,18 +24,27 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
     temp_eps = f"e_{job_id}.eps"
     
     try:
-        # 1. Dosyayı oku ve hemen küçült (RAM'i korumak için)
+        # 1. Dosyayı oku ve RAM dostu olması için hemen ufalt
         content = await file.read()
         img = Image.open(io.BytesIO(content)).convert("RGBA")
         
-        # 800px sınırı Render için hayat kurtarır
+        # 800px sınırı Render için hayati önem taşır uşağum!
         img.thumbnail((800, 800))
         img.save(temp_png)
         
-        # 2. Vektörleştirme (Kütüphane üzerinden direkt)
-        vtracer.convert_image_to_svg(temp_png, temp_svg, mode='spline', clustering_threshold=15)
+        # 2. VTracer kontrolü - Kütüphane hangi ismi kullanırsa kullansın bulacağuz!
+        v_func = getattr(vtracer, 'convert_image_to_svg', 
+                 getattr(vtracer, 'convert_to_svg', None))
+        
+        if v_func:
+            # VTracer'ı çalıştur
+            v_func(temp_png, temp_svg, mode='spline', clustering_threshold=15)
+        else:
+            # Eğer kütüphane patlarsa komut satırından deneyeceğuz (Laz inadı!)
+            os.system(f"vtracer --input {temp_png} --output {temp_svg} --mode spline")
 
         # 3. Inkscape ile EPS'ye çevir
+        # Render'ı kitlememek için subprocess kullanıyoruz
         process = await asyncio.create_subprocess_shell(
             f"inkscape {temp_svg} --export-type=eps --export-filename={temp_eps}",
             stdout=asyncio.subprocess.PIPE,
@@ -45,9 +55,9 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
         background_tasks.add_task(cleanup, [temp_png, temp_svg, temp_eps])
 
         if os.path.exists(temp_eps):
-            return FileResponse(temp_eps, filename="vektor.eps")
+            return FileResponse(temp_eps, filename=f"{file.filename.split('.')[0]}_vektor.eps", media_type='application/postscript')
         elif os.path.exists(temp_svg):
-            return FileResponse(temp_svg, filename="vektor.svg")
+            return FileResponse(temp_svg, filename=f"{file.filename.split('.')[0]}_vektor.svg", media_type='image/svg+xml')
         
         return JSONResponse(content={"hata": "Dosya oluşturulamadı uşağum!"}, status_code=500)
 
