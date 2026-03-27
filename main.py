@@ -5,8 +5,12 @@ from PIL import Image
 import cv2
 import numpy as np
 import vtracer
+from rembg import remove, new_session
 
 app = FastAPI()
+
+# Yapay zeka modelini rölantide tutayruk (Dekupe için hayati)
+session = new_session("u2netp")
 
 def cleanup(files: list):
     for f in files:
@@ -16,45 +20,50 @@ def cleanup(files: list):
 
 @app.get("/")
 async def home():
-    return {"mesaj": "Dernekpazari Jilet EPS Motoru Aktif!"}
+    return {"mesaj": "Dernekpazarı CAD Motoru (Blueprint) Aktif! /docs adresine gel!"}
 
 @app.post("/vektorlestir")
 async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     job_id = str(uuid.uuid4())
     temp_edge_png = f"e_{job_id}.png"
     temp_svg = f"s_{job_id}.svg"
-    temp_eps = f"eps_{job_id}.eps"  # EPS Uşaği Buraya Gelecek
     
     try:
+        # 1. DOSYAYI OKU VE UFALT (DSC fotoğrafları için bu hayati! RAM patlamasın)
         content = await file.read()
         img = Image.open(io.BytesIO(content)).convert("RGBA")
         
-        # Yapay zeka yok, boyutu rahatça 1200px yapabiluruk
-        img.thumbnail((1200, 1200)) 
+        # 1200px sınırı hem kalite hem RAM dostudur.
+        img.thumbnail((1200, 1200))
         
-        # Arka plani şeffafsa bembeyaz kağida koy
-        white_bg = Image.new("RGBA", img.size, "WHITE")
-        white_bg.paste(img, (0, 0), img)
+        # 2. YAPAY ZEKA İLE DEKUPE ET (Ürünü algıla ve arkayi sil)
+        # İşte "yapay zeka ürünü algılasın, arkaplandan ayırsın" inadun burda devrede!
+        no_bg_img = remove(img, session=session)
+        
+        # 3. OPENCV İÇİN HAZIRLA (Teknik iskelet çıkmadan önce bembeyaz bir kağıda koyalim)
+        white_bg = Image.new("RGBA", no_bg_img.size, "WHITE")
+        white_bg.paste(no_bg_img, (0, 0), no_bg_img)
         rgb_img = white_bg.convert("RGB")
-
-        # OpenCV mutfaği
-        img_cv2 = np.array(rgb_img)
-        img_cv2 = img_cv2[:, :, ::-1].copy() 
         
-        # Jilet gibi iskelet (Line Art)
+        # Pillow'dan OpenCV formatina (Numpy) geçiş
+        img_cv2 = np.array(rgb_img)
+        img_cv2 = img_cv2[:, :, ::-1].copy() # RGB'den BGR'ye
+        
+        # 4. TEKNİK ÇİZGİ İSKELETİNİ (LINE ART) ÇIKART
         gray = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         edges = cv2.Canny(blurred, 50, 150)
         
-        # Çizgiler kalınlaşsun (silik çikmasun)
+        # Çizgileri biraz kalınlaştur (O 10 örnekteki gibi net çiksun)
         kernel = np.ones((2,2), np.uint8)
         edges = cv2.dilate(edges, kernel, iterations=1)
         
-        # Vtracer islesun diye siyah üstüne beyaz değil, beyaz üstüne siyah çizgi yap
+        # Siyah arka planı beyaz, beyaz çizgileri siyah yap (Tam teknik blueprint tarzı)
         edges_inv = cv2.bitwise_not(edges)
         cv2.imwrite(temp_edge_png, edges_inv)
         
-        # 1. Aşama: VTracer ile SVG bas
+        # 5. VTRACER İLE VEKTÖR YAP (Teknik Çizim Ayarlarıyla)
+        # Hata veren 'clustering_threshold' silindi! 'colormode="bw"' (black/white) yapıldı.
         try:
             vtracer.convert_image_to_svg_py(temp_edge_png, temp_svg, colormode="bw", mode="spline")
         except AttributeError:
@@ -63,28 +72,22 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
             except Exception:
                 pass
                 
+        # Laz inadı: Kütüphane patlarsa komut satırından zorla
         if not os.path.exists(temp_svg):
             os.system(f"vtracer --input {temp_edge_png} --output {temp_svg} --colormode bw --mode spline")
 
         if not os.path.exists(temp_svg):
-            return JSONResponse(content={"hata": "Motor SVG basamadi uşağum!"}, status_code=500)
+            return JSONResponse(content={"hata": "Motor kilitlendi, SVG basulamadi uşağum!"}, status_code=500)
 
-        # 2. Aşama: LAZ İNADI (SVG'yi EPS yapayruk)
-        os.system(f"inkscape {temp_svg} --export-filename={temp_eps}")
-        
-        if not os.path.exists(temp_eps):
-            return JSONResponse(content={"hata": "Inkscape tekledi, EPS basulamadi!"}, status_code=500)
+        background_tasks.add_task(cleanup, [temp_edge_png, temp_svg])
 
-        # Temizlik
-        background_tasks.add_task(cleanup, [temp_edge_png, temp_svg, temp_eps])
-
-        # Direk EPS dosyasini firlat gitsun!
+        # Saf, temiz, jilet gibi CAD iskeletini (SVG) fırlat gitsin! Illustrator'da aç bak keyfine!
         return FileResponse(
-            path=temp_eps, 
-            filename=f"teknik_cizim_{job_id}.eps", 
-            media_type='application/postscript'
+            path=temp_svg, 
+            filename=f"{file.filename.split('.')[0]}_blueprint.svg", 
+            media_type='image/svg+xml'
         )
 
     except Exception as e:
-        cleanup([temp_edge_png, temp_svg, temp_eps])
+        cleanup([temp_edge_png, temp_svg])
         return JSONResponse(content={"hata": f"Mutfak yandi abi: {str(e)}"}, status_code=500)
