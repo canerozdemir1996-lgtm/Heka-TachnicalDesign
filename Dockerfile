@@ -1,6 +1,5 @@
 FROM python:3.11-slim-bookworm
 
-# Inkscape ve sistem kütüphaneleri (Zorunlu malzemeler)
 RUN apt-get update && apt-get install -y \
     inkscape \
     libgl1-mesa-glx \
@@ -10,10 +9,8 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Render'ın verdiği PORT neyse uşak oraya geçecek!
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10000"]
