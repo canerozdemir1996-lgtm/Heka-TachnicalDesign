@@ -9,9 +9,6 @@ from rembg import remove, new_session
 
 app = FastAPI()
 
-# Yapay zeka modelini rölantide tutayruk (Hamsi model)
-session = new_session("u2netp")
-
 def cleanup(files: list):
     for f in files:
         if os.path.exists(f):
@@ -20,7 +17,7 @@ def cleanup(files: list):
 
 @app.get("/")
 async def home():
-    return {"mesaj": "Dernekpazarı CAD Motoru (RAM Korumali) Aktif!"}
+    return {"mesaj": "Dernekpazarı CAD Motoru (En Düşük RAM Modu) Aktif!"}
 
 @app.post("/vektorlestir")
 async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
@@ -29,38 +26,36 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
     temp_svg = f"s_{job_id}.svg"
     
     try:
-        # 1. DOSYAYI OKU VE UFALT (1200px sunucuyu bayıltti, 800px hayat kurtarur!)
         content = await file.read()
         img = Image.open(io.BytesIO(content)).convert("RGBA")
-        img.thumbnail((800, 800)) 
         
-        # 2. YAPAY ZEKA İLE DEKUPE ET
+        # HAYAT MEMAT MESELESİ: 600px! Daha büyüğü 512MB RAM'i patlatiyi!
+        img.thumbnail((600, 600)) 
+        
+        # Yapay zekayı SADECE işi yaparken çağırıp sonra öldüreceğuz
+        session = new_session("u2netp")
         no_bg_img = remove(img, session=session)
         
-        # --- RAM KURTARMA OPERASYONU ---
-        # İlk fotoğrafun işi bitti, hafizadan komple sil!
+        # RAM'i temizle
+        del session
         del img
         del content
         gc.collect() 
         
-        # 3. OPENCV İÇİN HAZIRLA
+        # OpenCV işlemleri
         white_bg = Image.new("RGBA", no_bg_img.size, "WHITE")
         white_bg.paste(no_bg_img, (0, 0), no_bg_img)
         rgb_img = white_bg.convert("RGB")
         
-        # Dekupeli resmin de işi bitti, sil çöpe at!
         del no_bg_img
         gc.collect()
 
-        # Numpy formatina geçiş
         img_cv2 = np.array(rgb_img)
-        img_cv2 = img_cv2[:, :, ::-1].copy() # RGB'den BGR'ye
+        img_cv2 = img_cv2[:, :, ::-1].copy() 
         
-        # Beyaz resmin de işi bitti, yolla çöpe!
         del rgb_img
         gc.collect()
 
-        # 4. TEKNİK ÇİZGİ İSKELETİNİ (LINE ART) ÇIKART
         gray = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         edges = cv2.Canny(blurred, 50, 150)
@@ -71,11 +66,10 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
         edges_inv = cv2.bitwise_not(edges)
         cv2.imwrite(temp_edge_png, edges_inv)
         
-        # OpenCV değişkenlerini de sil, RAM ferahlasun!
         del img_cv2, gray, blurred, edges, edges_inv
         gc.collect()
         
-        # 5. VTRACER İLE VEKTÖR YAP
+        # VTracer İşlemi
         try:
             vtracer.convert_image_to_svg_py(temp_edge_png, temp_svg, colormode="bw", mode="spline")
         except AttributeError:
@@ -88,16 +82,16 @@ async def vektorlestir(background_tasks: BackgroundTasks, file: UploadFile = Fil
             os.system(f"vtracer --input {temp_edge_png} --output {temp_svg} --colormode bw --mode spline")
 
         if not os.path.exists(temp_svg):
-            return JSONResponse(content={"hata": "Motor kilitlendi, SVG basulamadi!"}, status_code=500)
+            return JSONResponse(content={"hata": "Motor kilitlendi uşağum!"}, status_code=500)
 
         background_tasks.add_task(cleanup, [temp_edge_png, temp_svg])
 
         return FileResponse(
             path=temp_svg, 
-            filename=f"{file.filename.split('.')[0]}_blueprint.svg", 
+            filename=f"teknik_cizim_{job_id}.svg", 
             media_type='image/svg+xml'
         )
 
     except Exception as e:
         cleanup([temp_edge_png, temp_svg])
-        return JSONResponse(content={"hata": f"Mutfak yandi abi: {str(e)}"}, status_code=500)
+        return JSONResponse(content={"hata": f"Mutfak yandi: {str(e)}"}, status_code=500)
